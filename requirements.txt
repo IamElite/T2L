@@ -5,4 +5,5 @@ fastapi
 starlette
 uvicorn
 pymongo  # Optional, but motor uses it
+TgCrypto  # For pyrogram speedup
 
