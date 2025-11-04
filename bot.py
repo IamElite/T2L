@@ -446,7 +446,6 @@ async def cmd_myfiles(client: Client, message: Message):
 
 # Main
 async def start_both():
-    await mongo.connect()
     await bot.start()
     config = uvicorn.Config(app, host="0.0.0.0", port=PORT)
     server = uvicorn.Server(config)
