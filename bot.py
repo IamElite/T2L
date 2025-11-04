@@ -46,7 +46,8 @@ from pyrogram import Client, filters
 from pyrogram.errors import MessageIdInvalid, ChannelInvalid
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse, AsyncStreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from starlette.responses import StreamingResponse as AsyncStreamingResponse
 import uvicorn
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -221,7 +222,7 @@ async def watch(log_msg_id: int, name: str, hash: str):
     uploader_id = record["uploader_id"]
     download_url = f"{BASE_URL}/{log_msg_id}/{name}?hash={hash}"
 
-    html = """
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head><title>{file_name}</title></head>
@@ -453,4 +454,3 @@ async def start_both():
 
 if __name__ == "__main__":
     asyncio.run(start_both())
-
