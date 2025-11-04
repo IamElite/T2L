@@ -293,50 +293,60 @@ async def download(log_msg_id: int, name: str, hash: str):
 # Pyrogram handlers
 @bot.on_message(filters.video & filters.private)
 async def handle_video(client: Client, message: Message):
-    if message.video.file_size > 4 * 1024 * 1024 * 1024:  # 4GB
-        await message.reply("File too large (>4GB)")
-        return
+    try:
+        if message.video.file_size > 4 * 1024 * 1024 * 1024:  # 4GB
+            await message.reply("File too large (>4GB)")
+            return
 
-    logging.info("File received")
-    log_msg = await message.copy(LOG_CHANNEL_ID)
-    logging.info("Copied to log channel")
+        logging.info("File received")
+        log_msg = await message.copy(LOG_CHANNEL_ID)
+        logging.info("Copied to log channel")
 
-    hash_val = get_hash(log_msg)
-    name = get_name(log_msg)
+        hash_val = get_hash(log_msg)
+        name = get_name(log_msg)
+        logging.info(f"Hash: {hash_val}, Name: {name}")
 
-    stream_url = f"{BASE_URL}/watch/{log_msg.id}/{quote_plus(name)}?hash={hash_val}"
-    download_url = f"{BASE_URL}/{log_msg.id}/{quote_plus(name)}?hash={hash_val}"
+        stream_url = f"{BASE_URL}/watch/{log_msg.id}/{quote_plus(name)}?hash={hash_val}"
+        download_url = f"{BASE_URL}/{log_msg.id}/{quote_plus(name)}?hash={hash_val}"
+        logging.info(f"Stream URL: {stream_url}")
+        logging.info(f"Download URL: {download_url}")
 
-    short_stream = None
-    short_download = None
-    if SHORTLINK_ENABLED:
-        logging.info("Creating shortlinks")
-        short_stream = await get_shortlink(stream_url)
-        short_download = await get_shortlink(download_url)
+        short_stream = None
+        short_download = None
+        if SHORTLINK_ENABLED:
+            logging.info("Creating shortlinks")
+            short_stream = await get_shortlink(stream_url)
+            short_download = await get_shortlink(download_url)
+            logging.info(f"Short stream: {short_stream}, Short download: {short_download}")
 
-    await save_file_record(
-        log_msg_id=log_msg.id,
-        uploader_id=message.from_user.id,
-        file_name=name,
-        file_size=log_msg.video.file_size,
-        tg_file_id=log_msg.media.file_id,
-        hash=hash_val,
-        short_stream=short_stream,
-        short_download=short_download
-    )
+        await save_file_record(
+            log_msg_id=log_msg.id,
+            uploader_id=message.from_user.id,
+            file_name=name,
+            file_size=log_msg.video.file_size,
+            tg_file_id=log_msg.media.file_id,
+            hash=hash_val,
+            short_stream=short_stream,
+            short_download=short_download
+        )
+        logging.info("File record saved")
 
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("▶️ Stream", url=short_stream or stream_url),
-            InlineKeyboardButton("⬇️ Download", url=short_download or download_url)
-        ],
-        [
-            InlineKeyboardButton("🗑️ Delete", callback_data=f"delete:{log_msg.id}"),
-            InlineKeyboardButton("ℹ️ Info", callback_data=f"info:{log_msg.id}")
-        ]
-    ])
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("▶️ Stream", url=short_stream or stream_url),
+                InlineKeyboardButton("⬇️ Download", url=short_download or download_url)
+            ],
+            [
+                InlineKeyboardButton("🗑️ Delete", callback_data=f"delete:{log_msg.id}"),
+                InlineKeyboardButton("ℹ️ Info", callback_data=f"info:{log_msg.id}")
+            ]
+        ])
 
-    await message.reply("✅ File processed!\n▶️ Stream   ⬇️ Download   🗑️ Delete   ℹ️ Info", reply_markup=keyboard)
+        await message.reply("✅ File processed!\n▶️ Stream   ⬇️ Download   🗑️ Delete   ℹ️ Info", reply_markup=keyboard)
+        logging.info("Reply sent to user")
+    except Exception as e:
+        logging.error(f"Error processing video: {e}")
+        await message.reply(f"❌ Error processing file: {str(e)}")
 
 @bot.on_callback_query(filters.regex(r'(delete|info):\d+'))
 async def handle_callback(client: Client, query: CallbackQuery):
