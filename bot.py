@@ -46,7 +46,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import MessageIdInvalid, ChannelInvalid
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, AsyncStreamingResponse
 import uvicorn
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -221,7 +221,7 @@ async def watch(log_msg_id: int, name: str, hash: str):
     uploader_id = record["uploader_id"]
     download_url = f"{BASE_URL}/{log_msg_id}/{name}?hash={hash}"
 
-    html = f"""
+    html = """
     <!DOCTYPE html>
     <html>
     <head><title>{file_name}</title></head>
@@ -255,22 +255,22 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
         end = int(parts[1]) if len(parts) > 1 and parts[1] else total_size - 1
         new_len = end - start + 1
 
-        def iterator():
+        async def iterator():
             async for chunk in log_msg.media.download_iter(start=start, size=new_len, chunk_size=64*1024):
                 yield chunk
 
-        return StreamingResponse(iterator(), status_code=206, headers={
+        return AsyncStreamingResponse(iterator(), status_code=206, headers={
             "Content-Range": f"bytes {start}-{end}/{total_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(new_len),
             "Content-Type": "video/mp4"
         })
     else:
-        def iterator():
+        async def iterator():
             async for chunk in log_msg.media.download_iter(chunk_size=64*1024):
                 yield chunk
 
-        return StreamingResponse(iterator(), headers={"Content-Type": "video/mp4"})
+        return AsyncStreamingResponse(iterator(), headers={"Content-Type": "video/mp4"})
 
 @app.get("/{log_msg_id}/{name}")
 async def download(log_msg_id: int, name: str, hash: str):
@@ -280,11 +280,11 @@ async def download(log_msg_id: int, name: str, hash: str):
 
     file_name = record["file_name"]
 
-    def iterator():
+    async def iterator():
         async for chunk in stream_telegram_file(log_msg_id):
             yield chunk
 
-    return StreamingResponse(iterator(), headers={
+    return AsyncStreamingResponse(iterator(), headers={
         "Content-Disposition": f"attachment; filename=\"{file_name}\"",
         "Content-Type": "application/octet-stream"
     })
@@ -454,21 +454,3 @@ async def start_both():
 if __name__ == "__main__":
     asyncio.run(start_both())
 
-# Pytest skeletons
-import pytest
-
-def test_get_name():
-    # Mock Message
-    pass
-
-def test_get_hash():
-    # Assert hash length and deterministic
-    pass
-
-@pytest.mark.asyncio
-async def test_save_file_record():
-    pass
-
-@pytest.mark.asyncio
-async def test_delete_file_record():
-    pass
