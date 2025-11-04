@@ -2,6 +2,7 @@ pyrogram
 motor
 httpx
 fastapi
+starlette
 uvicorn
 pymongo  # Optional, but motor uses it
-pytest  # For testing
+
