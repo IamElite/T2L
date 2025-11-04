@@ -1,0 +1,7 @@
+pyrogram
+motor
+httpx
+fastapi
+uvicorn
+pymongo  # Optional, but motor uses it
+pytest  # For testing

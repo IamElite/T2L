@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Player</title>
+    <style>
+        body { margin: 0; padding: 0; }
+        iframe { width: 100%; height: 100vh; border: none; }
+    </style>
+</head>
+<body>
+    <!-- Replace BASE_URL with your actual base URL -->
+    <iframe src="BASE_URL/player.html?id={{ID}}&name={{NAME}}&hash={{HASH}}" allow="autoplay; fullscreen"></iframe>
+</body>
+</html>
+<!-- Example embed snippet:
+   <iframe src="https://your-url.com/player.html?id=12345&name=movie.mp4&hash=abcd" allow="autoplay; fullscreen" style="width: 100%; height: 400px; border: none;"></iframe>
+-->
