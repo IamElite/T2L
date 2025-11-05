@@ -1,4 +1,4 @@
-pyrogram
+#pyrogram
 motor
 httpx
 fastapi
@@ -6,4 +6,7 @@ starlette
 uvicorn
 pymongo  # Optional, but motor uses it
 TgCrypto  # For pyrogram speedup
+
+
+https://github.com/IamDvis/pyrogram/archive/dvis.zip
 
