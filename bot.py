@@ -84,7 +84,7 @@ bot = Client(
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
-    no_updates=False
+    workers=4
 )
 
 # ==================== UTILITY FUNCTIONS ====================
@@ -201,6 +201,7 @@ async def delete_file_record(log_msg_id: int, requester_id: int) -> bool:
 
 # ==================== FASTAPI ROUTES ====================
 
+@app.head("/")
 @app.get("/")
 async def root():
     """Health check endpoint."""
@@ -210,6 +211,7 @@ async def root():
         "version": "1.0"
     }
 
+@app.head("/health")
 @app.get("/health")
 async def health():
     """Health check."""
@@ -317,7 +319,7 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
             new_len = end - start + 1
             
             async def range_iterator():
-                async for chunk in log_msg.media.download_iter(start=start, size=new_len, chunk_size=64*1024):
+                async for chunk in bot.download_media(log_msg, in_memory=True, offset=start, limit=new_len):
                     yield chunk
             
             return StreamingResponse(
@@ -332,7 +334,7 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
             )
         else:
             async def full_iterator():
-                async for chunk in log_msg.media.download_iter(chunk_size=64*1024):
+                async for chunk in bot.download_media(log_msg, in_memory=True):
                     yield chunk
             
             return StreamingResponse(full_iterator(), headers={"Content-Type": "video/mp4"})
@@ -359,7 +361,7 @@ async def download(log_msg_id: int, name: str, hash: str):
             raise HTTPException(status_code=404, detail="Message not found")
         
         async def download_iterator():
-            async for chunk in log_msg.media.download_iter(chunk_size=64*1024):
+            async for chunk in bot.download_media(log_msg, in_memory=True):
                 yield chunk
         
         return StreamingResponse(
@@ -443,7 +445,7 @@ async def handle_video(client: Client, message: Message):
             uploader_id=message.from_user.id,
             file_name=file_name,
             file_size=file_size,
-            tg_file_id=log_msg.media.file_id,
+            tg_file_id=log_msg.video.file_id,
             hash_val=hash_val,
             short_stream=short_stream,
             short_download=short_download
@@ -508,7 +510,7 @@ async def handle_document(client: Client, message: Message):
             uploader_id=message.from_user.id,
             file_name=file_name,
             file_size=file_size,
-            tg_file_id=log_msg.media.file_id,
+            tg_file_id=log_msg.document.file_id,
             hash_val=hash_val,
             short_download=short_download
         )
@@ -659,27 +661,40 @@ async def cmd_help_admin(client: Client, message: Message):
 # ==================== MAIN FUNCTION ====================
 
 async def main():
-    """Main function to run bot and server."""
+    """Main function to run bot and server concurrently."""
     try:
         logger.info("🚀 Starting Telegram File Bot...")
         
-        # Start bot
-        async with bot:
-            logger.info("✅ Bot started successfully!")
-            
-            # Run FastAPI server
-            config = uvicorn.Config(
-                app,
-                host="0.0.0.0",
-                port=PORT,
-                log_level="info"
-            )
-            server = uvicorn.Server(config)
-            await server.serve()
+        # Start bot first
+        await bot.start()
+        logger.info("✅ Bot started successfully!")
+        
+        # Configure FastAPI server
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=PORT,
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
+        
+        # Create tasks for both services
+        bot_task = asyncio.create_task(bot.idle())
+        server_task = asyncio.create_task(server.serve())
+        
+        logger.info("✅ Both services are running!")
+        
+        # Run until interrupted
+        await asyncio.gather(bot_task, server_task)
     
+    except KeyboardInterrupt:
+        logger.info("⛔ Shutting down...")
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         raise
+    finally:
+        await bot.stop()
+        logger.info("✅ Bot stopped cleanly")
 
 if __name__ == "__main__":
     try:
@@ -688,4 +703,3 @@ if __name__ == "__main__":
         logger.info("⛔ Bot stopped by user")
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
-
