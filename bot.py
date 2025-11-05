@@ -377,7 +377,7 @@ async def handle_callback(client: Client, query: CallbackQuery):
         await query.answer("Deleted")
 
 # Admin commands
-@bot.on_message(filters.command("stats") & filters.user([OWNER_ID]))
+@bot.on_message(filters.command("stats") & filters.user([OWNER_ID]) & filters.private)
 async def cmd_stats(client: Client, message: Message):
     total_files = await files_collection.count_documents({})
     total_size = 0
@@ -388,7 +388,7 @@ async def cmd_stats(client: Client, message: Message):
     total_users = 0 if not STORE_USER else await users_collection.count_documents({})
     await message.reply(f"Files: {total_files}\nSize: {format_size(total_size)}\nUsers: {total_users}")
 
-@bot.on_message(filters.command("users") & filters.user([OWNER_ID]))
+@bot.on_message(filters.command("users") & filters.user([OWNER_ID]) & filters.private)
 async def cmd_users(client: Client, message: Message):
     if not STORE_USER:
         await message.reply("User tracking disabled")
@@ -398,7 +398,7 @@ async def cmd_users(client: Client, message: Message):
     text = "\n".join([f"{u['user_id']}: {u['file_count']}" for u in users_list])
     await message.reply(text or "No users")
 
-@bot.on_message(filters.command("broadcast") & filters.user([OWNER_ID]))
+@bot.on_message(filters.command("broadcast") & filters.user([OWNER_ID]) & filters.private)
 async def cmd_broadcast(client: Client, message: Message):
     if not STORE_USER:
         return
@@ -418,23 +418,23 @@ async def cmd_broadcast(client: Client, message: Message):
             pass
     await message.reply(f"Broadcasted to {sent}/{len(users)} users")
 
-@bot.on_message(filters.command("restart") & filters.user([OWNER_ID]))
+@bot.on_message(filters.command("restart") & filters.user([OWNER_ID]) & filters.private)
 async def cmd_restart(client: Client, message: Message):
     await message.reply("Restarting...")
     import sys
     sys.exit(0)
 
-@bot.on_message(filters.command("help_admin") & filters.user([OWNER_ID]))
+@bot.on_message(filters.command("help_admin") & filters.user([OWNER_ID]) & filters.private)
 async def cmd_help_admin(client: Client, message: Message):
     help_text = "/stats - file stats\n/users - top users\n/broadcast <msg> - send to users\n/restart - shutdown\n"
     await message.reply(help_text)
 
 # User commands
-@bot.on_message(filters.command("start"))
+@bot.on_message(filters.command("start") & filters.private)
 async def cmd_start(client: Client, message: Message):
     await message.reply("Send me videos and I'll give you stream/download links!")
 
-@bot.on_message(filters.command("myfiles"))
+@bot.on_message(filters.command("myfiles") & filters.private)
 async def cmd_myfiles(client: Client, message: Message):
     uploader_id = message.from_user.id
     cursor = files_collection.find({"uploader_id": uploader_id}).sort("date", -1).limit(10)  # Simple pagination, limit 10
