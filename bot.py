@@ -182,7 +182,7 @@ async def watch(log_msg_id: int, name: str, hash: str):
     download_url = f"{BASE_URL}/{log_msg_id}/{name}?hash={hash}"
     stream_url = f"{BASE_URL}/stream/{log_msg_id}/{name}?hash={hash}"
     
-    html = f"""
+    html = """
     <!DOCTYPE html>
     <html>
     <head>
@@ -608,3 +608,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
