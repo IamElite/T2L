@@ -1,5 +1,5 @@
 """
-Telegram File-to-Link Bot - FULLY WORKING VERSION
+Telegram File-to-Link Bot - FLOOD-WAIT PROTECTED VERSION
 """
 
 import asyncio
@@ -13,6 +13,7 @@ from urllib.parse import quote_plus
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters, idle
+from pyrogram.errors import FloodWait
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -55,9 +56,22 @@ except Exception as e:
     logger.error(f"❌ MongoDB error: {e}")
     db = None
 
-# FastAPI & Pyrogram
+# FastAPI
 app = FastAPI(title="File Bot", version="1.0")
-bot = Client("file_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, workers=4)
+
+# Pyrogram with persistent session (CRITICAL FIX)
+# Session will be saved in /app/sessions/ directory
+SESSION_DIR = "/app/sessions"
+os.makedirs(SESSION_DIR, exist_ok=True)
+SESSION_FILE = os.path.join(SESSION_DIR, "bot_session")
+
+bot = Client(
+    SESSION_FILE,  # This will create bot_session.session file
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    workers=4
+)
 
 # ==================== UTILITIES ====================
 
@@ -182,7 +196,7 @@ async def watch(log_msg_id: int, name: str, hash: str):
     download_url = f"{BASE_URL}/{log_msg_id}/{name}?hash={hash}"
     stream_url = f"{BASE_URL}/stream/{log_msg_id}/{name}?hash={hash}"
     
-    html = """
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -233,7 +247,6 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
         if not log_msg or not (log_msg.video or log_msg.document):
             raise HTTPException(404, "File not found")
         
-        # Get file size
         if log_msg.video:
             total_size = log_msg.video.file_size
         else:
@@ -242,15 +255,11 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
         range_header = request.headers.get("range")
         
         if range_header:
-            # Parse range header
             byte_range = range_header.replace("bytes=", "").split("-")
             start = int(byte_range[0]) if byte_range[0] else 0
             end = int(byte_range[1]) if len(byte_range) > 1 and byte_range[1] else total_size - 1
-            
-            # Calculate chunk size
             chunk_size = end - start + 1
             
-            # Stream with range using proper Pyrogram stream_media
             async def range_streamer():
                 offset = start
                 remaining = chunk_size
@@ -268,7 +277,6 @@ async def stream(log_msg_id: int, name: str, hash: str, request: Request):
                 }
             )
         else:
-            # Full file streaming
             async def full_streamer():
                 async for chunk in bot.stream_media(log_msg):
                     yield chunk
@@ -303,7 +311,6 @@ async def download(log_msg_id: int, name: str, hash: str):
         if not log_msg or not (log_msg.video or log_msg.document):
             raise HTTPException(404, "File not found")
         
-        # Stream file for download
         async def download_streamer():
             async for chunk in bot.stream_media(log_msg):
                 yield chunk
@@ -365,28 +372,23 @@ async def handle_video(client, message):
     status = await message.reply("⏳ Processing your video...")
     
     try:
-        # Copy to log channel
         log_msg = await message.copy(LOG_CHANNEL_ID)
         logger.info(f"Copied video to log: {log_msg.id}")
         
-        # Generate hash and URLs
         hash_val = get_hash(log_msg)
         file_name = get_name(log_msg)
         
         stream_url = f"{BASE_URL}/watch/{log_msg.id}/{quote_plus(file_name)}?hash={hash_val}"
         download_url = f"{BASE_URL}/{log_msg.id}/{quote_plus(file_name)}?hash={hash_val}"
         
-        # Get shortlinks if enabled
         short_stream = await get_shortlink(stream_url)
         short_download = await get_shortlink(download_url)
         
-        # Save to database
         await save_file_record(
             log_msg.id, message.from_user.id, file_name, file_size,
             log_msg.video.file_id, hash_val, short_stream, short_download
         )
         
-        # Create response keyboard
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("▶️ Stream Online", url=short_stream or stream_url),
@@ -407,6 +409,13 @@ async def handle_video(client, message):
         )
         logger.info(f"✅ Video processed: {file_name}")
         
+    except FloodWait as e:
+        logger.warning(f"FloodWait {e.value}s - Waiting...")
+        await status.edit_text(f"⏰ Rate limit hit! Waiting {e.value} seconds...")
+        await asyncio.sleep(e.value)
+        await status.edit_text("✅ Retrying...")
+        # Retry the operation
+        await handle_video(client, message)
     except Exception as e:
         logger.error(f"Video processing error: {e}")
         await status.edit_text(f"❌ Error processing video: {str(e)}")
@@ -425,24 +434,20 @@ async def handle_document(client, message):
     status = await message.reply("⏳ Processing your document...")
     
     try:
-        # Copy to log channel
         log_msg = await message.copy(LOG_CHANNEL_ID)
         logger.info(f"Copied document to log: {log_msg.id}")
         
-        # Generate hash and URLs
         hash_val = get_hash(log_msg)
         file_name = get_name(log_msg)
         
         download_url = f"{BASE_URL}/{log_msg.id}/{quote_plus(file_name)}?hash={hash_val}"
         short_download = await get_shortlink(download_url)
         
-        # Save to database
         await save_file_record(
             log_msg.id, message.from_user.id, file_name, file_size,
             log_msg.document.file_id, hash_val, None, short_download
         )
         
-        # Create response keyboard
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬇️ Download File", url=short_download or download_url)],
             [
@@ -460,6 +465,12 @@ async def handle_document(client, message):
         )
         logger.info(f"✅ Document processed: {file_name}")
         
+    except FloodWait as e:
+        logger.warning(f"FloodWait {e.value}s - Waiting...")
+        await status.edit_text(f"⏰ Rate limit hit! Waiting {e.value} seconds...")
+        await asyncio.sleep(e.value)
+        await status.edit_text("✅ Retrying...")
+        await handle_document(client, message)
     except Exception as e:
         logger.error(f"Document processing error: {e}")
         await status.edit_text(f"❌ Error processing document: {str(e)}")
@@ -524,7 +535,6 @@ async def cmd_myfiles(client, message):
         for i, r in enumerate(records, 1):
             text += f"{i}. `{r['file_name'][:30]}...` - {format_size(r['file_size'])}\n"
             
-            # Check if it's a video (has stream option)
             if r.get("short_stream") or "watch" in str(r.get("short_stream", "")):
                 btns = [
                     InlineKeyboardButton("▶️", url=r.get("short_stream") or f"{BASE_URL}/watch/{r['log_msg_id']}/{quote_plus(r['file_name'])}?hash={r['hash']}"),
@@ -574,13 +584,35 @@ async def cmd_stats(client, message):
         logger.error(f"Stats error: {e}")
         await message.reply(f"❌ Error: {str(e)}")
 
-# ==================== MAIN ====================
+# ==================== MAIN WITH FLOODWAIT PROTECTION ====================
 
 async def main():
     logger.info("🚀 Starting bot...")
     
-    await bot.start()
-    logger.info("✅ Bot is online!")
+    # Start bot with FloodWait handling
+    max_retries = 5
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            await bot.start()
+            logger.info("✅ Bot is online!")
+            break
+        except FloodWait as e:
+            logger.warning(f"⏰ FloodWait: Need to wait {e.value} seconds ({e.value//60} minutes)")
+            logger.info(f"⏳ Waiting... (Attempt {retry_count + 1}/{max_retries})")
+            await asyncio.sleep(e.value + 5)  # Add 5 extra seconds buffer
+            retry_count += 1
+        except Exception as e:
+            logger.error(f"❌ Bot start error: {e}")
+            if retry_count < max_retries - 1:
+                wait_time = 10 * (2 ** retry_count)  # Exponential backoff
+                logger.info(f"Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+                retry_count += 1
+            else:
+                logger.error("Max retries reached. Exiting...")
+                return
     
     # FastAPI server config
     config = uvicorn.Config(
