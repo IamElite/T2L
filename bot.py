@@ -1,5 +1,5 @@
 """
-Telegram File-to-Link Bot with FastAPI - CLEAN VERSION
+Telegram File-to-Link Bot with FastAPI - PYTHON 3.10 COMPATIBLE
 """
 
 import asyncio
@@ -27,9 +27,8 @@ logger = logging.getLogger(__name__)
 
 # Disable verbose Pyrogram logs
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
-logging.getLogger("pyrogram.session.auth").setLevel(logging.ERROR)
+logging.getLogger("pyrogram.session").setLevel(logging.ERROR)
 logging.getLogger("pyrogram.connection").setLevel(logging.ERROR)
-logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
 
 # Load config
 try:
@@ -500,15 +499,17 @@ async def main():
     config = uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="warning")
     server = uvicorn.Server(config)
     
-    # Run both together
-    async with asyncio.TaskGroup() as group:
-        group.create_task(idle())
-        group.create_task(server.serve())
+    # Run both together with asyncio.gather (Python 3.10 compatible)
+    try:
+        await asyncio.gather(
+            idle(),
+            server.serve()
+        )
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("⛔ Shutting down...")
+    finally:
+        await bot.stop()
+        logger.info("✅ Stopped")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("⛔ Stopped")
-    except Exception as e:
-        logger.error(f"❌ Error: {e}")
+    asyncio.run(main())
