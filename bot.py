@@ -65,7 +65,7 @@ except Exception as e:
 
 # MongoDB setup
 try:
-    mongo = AsyncIOMotorClient(MONGO_URL, serverSelectionTimeoutMS=5000)
+    mongo = AsyncIOMotorClient(MONGO_URL)
     db = mongo.filetolinks
     files_collection = db.files
     users_collection = db.users if STORE_USER else None
@@ -688,3 +688,4 @@ if __name__ == "__main__":
         logger.info("⛔ Bot stopped by user")
     except Exception as e:
         logger.error(f"❌ Startup error: {e}")
+
